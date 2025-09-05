@@ -1,0 +1,122 @@
+---
+alwaysApply: true
+description: FastAPI项目开发通用规则和最佳实践
+---
+
+# FastAPI 项目开发规则
+
+## 项目结构约定
+
+项目遵循标准的FastAPI项目结构：
+- `main.py` - 应用程序入口点，引用 [main.py](mdc:main.py)
+- `app/` - 核心应用目录
+  - `api/v1/endpoints/` - API路由端点
+  - `core/` - 核心配置和设置
+  - `db/` - 数据库连接和会话管理
+  - `models/` - SQLAlchemy数据模型
+  - `schemas/` - Pydantic数据验证模式
+  - `services/` - 业务逻辑层
+  - `utils/` - 工具函数
+- `alembic/` - 数据库迁移文件
+
+## 代码风格规范
+
+### Python代码风格
+- 使用Python 3.12+特性
+- 遵循PEP 8代码风格
+- 使用类型注解（Type Hints）
+- 函数和类名使用英文，注释使用中文
+- 导入顺序：标准库 -> 第三方库 -> 本地导入
+
+### FastAPI特定规范
+- 路由函数使用动词命名（get_user, create_item, update_profile）
+- 使用依赖注入（Dependency Injection）进行数据库会话管理
+- API响应使用Pydantic模式进行序列化
+- 使用HTTP状态码常量而不是数字
+
+## 依赖管理
+
+项目使用 `uv` 作为包管理器，配置文件为 [pyproject.toml](mdc:pyproject.toml)：
+- 依赖定义在 `pyproject.toml` 中
+- 运行 `uv sync` 同步依赖
+- 使用 `uv run` 执行命令
+
+## API开发最佳实践
+
+### 路由设计
+- 使用RESTful API设计原则
+- API版本化（/api/v1/）
+- 路由分组放在不同的文件中
+- 使用路由前缀和标签进行组织
+
+### 数据验证
+- 请求体使用Pydantic模式验证
+- 响应体使用Pydantic模式序列化
+- 使用Field()定义字段验证规则和文档
+- 敏感数据不在响应中返回（如密码）
+
+### 错误处理
+- 使用HTTPException抛出HTTP错误
+- 自定义异常处理器
+- 提供有意义的错误消息
+- 记录错误日志
+
+## 数据库最佳实践
+
+### 模型定义
+- SQLAlchemy模型放在 `models/` 目录
+- 使用声明式基类
+- 定义适当的关系和约束
+- 使用UUID主键（推荐）
+
+### 数据库迁移
+- 使用Alembic进行数据库迁移
+- 迁移文件包含有意义的描述
+- 测试迁移的向前和向后兼容性
+
+### 数据库会话
+- 使用依赖注入管理数据库会话
+- 适当处理事务和回滚
+- 避免N+1查询问题
+
+## 安全实践
+
+- 使用环境变量存储敏感配置
+- 实现适当的认证和授权
+- 输入验证和SQL注入防护
+- CORS配置
+- 敏感端点使用HTTPS
+
+## 测试规范
+
+- 单元测试覆盖业务逻辑
+- 集成测试覆盖API端点
+- 使用pytest和FastAPI测试客户端
+- 测试数据库使用独立的测试数据库
+
+## 文档规范
+
+- 使用FastAPI自动生成的OpenAPI文档
+- 路由函数包含docstring
+- 重要函数添加类型注解
+- API端点包含适当的标签和描述
+
+## 性能优化
+
+- 使用异步函数处理I/O密集操作
+- 数据库查询优化
+- 适当使用缓存
+- 静态文件使用CDN
+
+## 部署考虑
+
+- 使用Uvicorn作为ASGI服务器
+- 配置适当的日志级别
+- 健康检查端点
+- 优雅关闭处理
+
+## 开发工具
+
+- 使用 `uv run uvicorn main:app --reload` 启动开发服务器
+- 使用 `uv run alembic revision --autogenerate -m "description"` 创建迁移
+- 使用 `uv run alembic upgrade head` 应用迁移

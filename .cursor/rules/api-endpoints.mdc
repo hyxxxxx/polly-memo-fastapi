@@ -1,0 +1,199 @@
+---
+globs: "app/api/**/*.py"
+description: FastAPI端点开发规范和最佳实践
+---
+
+# API 端点开发规范
+
+## 路由设计原则
+
+### RESTful API 规范
+- `GET /users` - 获取用户列表
+- `GET /users/{user_id}` - 获取单个用户
+- `POST /users` - 创建新用户
+- `PUT /users/{user_id}` - 完整更新用户
+- `PATCH /users/{user_id}` - 部分更新用户
+- `DELETE /users/{user_id}` - 删除用户
+
+### 函数命名约定
+```python
+@router.get("/users")
+async def get_users() -> list[UserResponse]:
+    """获取用户列表"""
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: int) -> UserResponse:
+    """根据ID获取用户"""
+
+@router.post("/users", status_code=201)
+async def create_user(user: UserCreate) -> UserResponse:
+    """创建新用户"""
+
+@router.put("/users/{user_id}")
+async def update_user(user_id: int, user: UserUpdate) -> UserResponse:
+    """更新用户信息"""
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(user_id: int) -> None:
+    """删除用户"""
+```
+
+## 请求/响应模式
+
+### Pydantic 模式命名
+- `UserCreate` - 创建请求
+- `UserUpdate` - 更新请求
+- `UserResponse` - 响应数据
+- `UserInDB` - 数据库模型
+
+### 状态码使用
+```python
+from fastapi import status
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+```
+
+## 依赖注入模式
+
+### 数据库会话
+```python
+from app.db.session import get_db
+
+@router.get("/users")
+async def get_users(db: Session = Depends(get_db)):
+    """获取用户列表"""
+```
+
+### 认证和授权
+```python
+from app.core.auth import get_current_user
+
+@router.get("/profile")
+async def get_profile(current_user: User = Depends(get_current_user)):
+    """获取当前用户信息"""
+```
+
+### 分页参数
+```python
+from app.core.pagination import PaginationParams
+
+@router.get("/users")
+async def get_users(
+    pagination: PaginationParams = Depends(),
+    db: Session = Depends(get_db)
+):
+    """获取用户列表（分页）"""
+```
+
+## 错误处理
+
+### 统一异常处理
+```python
+from fastapi import HTTPException, status
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: int, db: Session = Depends(get_db)):
+    """获取用户详情"""
+    user = await user_service.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    return user
+```
+
+### 验证错误
+```python
+from pydantic import ValidationError
+
+try:
+    user_data = UserCreate(**request_data)
+except ValidationError as e:
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=e.errors()
+    )
+```
+
+## 文档和标签
+
+### 路由标签
+```python
+from fastapi import APIRouter
+
+router = APIRouter(
+    prefix="/api/v1/users",
+    tags=["用户管理"]
+)
+```
+
+### 端点文档
+```python
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=201,
+    summary="创建用户",
+    description="创建新的用户账户",
+    response_description="成功创建的用户信息"
+)
+async def create_user(user: UserCreate):
+    """
+    创建新用户:
+    
+    - **username**: 用户名（必需）
+    - **email**: 邮箱地址（必需）
+    - **password**: 密码（必需）
+    """
+```
+
+## 安全考虑
+
+### 输入验证
+```python
+from pydantic import Field, EmailStr
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr = Field(...)
+    password: str = Field(..., min_length=8)
+```
+
+### 敏感数据处理
+```python
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    # 不包含密码等敏感信息
+    
+    class Config:
+        from_attributes = True
+```
+
+## 性能优化
+
+### 异步处理
+```python
+@router.get("/users")
+async def get_users(db: AsyncSession = Depends(get_async_db)):
+    """异步获取用户列表"""
+    users = await user_service.get_all(db)
+    return users
+```
+
+### 响应模型优化
+```python
+from fastapi import Response
+
+@router.get("/users/{user_id}/avatar")
+async def get_user_avatar(user_id: int):
+    """获取用户头像（返回二进制数据）"""
+    avatar_data = await get_avatar_data(user_id)
+    return Response(
+        content=avatar_data,
+        media_type="image/jpeg"
+    )
+```

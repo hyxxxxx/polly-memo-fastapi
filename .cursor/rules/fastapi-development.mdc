@@ -1,0 +1,294 @@
+---
+alwaysApply: false
+---
+
+# FastAPI 开发规范
+
+## 项目结构规范
+遵循标准的FastAPI项目结构模式：
+- `main.py` - 应用入口点和配置
+- `app/api/` - API路由和端点
+- `app/core/` - 核心配置和工具
+- `app/services/` - 业务逻辑服务层
+- `app/schemas/` - Pydantic数据模式
+- `app/models/` - 数据库模型（如需要）
+
+## 代码规范
+
+### 导入顺序
+```python
+# 标准库导入
+import os
+from typing import Optional
+
+# 第三方库导入
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+# 本地应用导入
+from app.core.config import settings
+from app.services.media_service import MediaProcessingService
+```
+
+### 异常处理
+- 使用HTTPException抛出API错误
+- 提供清晰的中文错误消息
+- 包含适当的HTTP状态码
+
+```python
+# 正确示例
+raise HTTPException(
+    status_code=400,
+    detail="不支持的文件类型，只支持音频和视频文件"
+)
+```
+
+### 依赖注入
+使用FastAPI的依赖注入系统管理服务：
+
+```python
+def get_media_service() -> MediaProcessingService:
+    """依赖注入：获取媒体处理服务"""
+    return MediaProcessingService()
+
+@router.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    service: MediaProcessingService = Depends(get_media_service)
+):
+    pass
+```
+
+## API端点规范
+
+### 路由定义
+- 使用清晰的路径和HTTP方法
+- 提供summary和description
+- 指定response_model
+
+```python
+@router.post(
+    "/upload",
+    response_model=MediaUploadResponse,
+    summary="上传并处理音视频文件",
+    description="上传音视频文件，自动进行压缩和格式转换，然后上传到云存储"
+)
+```
+
+### 响应模式
+- 所有API响应使用Pydantic模型
+- 提供清晰的字段描述
+- 使用合适的数据类型
+
+```python
+class MediaUploadResponse(BaseModel):
+    success: bool = Field(..., description="上传是否成功")
+    file_url: str = Field(..., description="文件的公开访问URL")
+    message: Optional[str] = Field(None, description="处理信息")
+```
+
+## 异步编程规范
+
+### 异步函数使用
+- 所有I/O操作使用async/await
+- 文件操作使用异步方式
+- 外部API调用异步化
+
+```python
+async def process_file(file: UploadFile) -> str:
+    # 异步读取文件
+    content = await file.read()
+    
+    # 异步执行外部命令
+    process = await asyncio.create_subprocess_exec(...)
+    stdout, stderr = await process.communicate()
+```
+
+## 配置管理规范
+- 使用Pydantic Settings管理配置
+- 支持环境变量覆盖
+- 提供合理的默认值
+
+```python
+class Settings(BaseSettings):
+    """应用程序设置"""
+    supabase_url: Optional[str] = None
+    max_file_size: int = 100 * 1024 * 1024  # 100MB
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+```
+
+## 文档规范
+- 所有函数和类使用中文文档字符串
+- 描述参数、返回值和异常
+- 包含使用示例
+
+```python
+async def upload_media_file(file: UploadFile) -> MediaUploadResponse:
+    """
+    上传并处理媒体文件
+    
+    处理流程：
+    1. 验证文件类型（仅支持音视频文件）
+    2. 检查文件大小，超过10MB则压缩
+    3. 格式转换：音频转mp3，视频转mp4
+    4. 上传到Supabase Storage
+    5. 返回文件URL和处理信息
+    
+    Args:
+        file: 上传的文件
+        
+    Returns:
+        MediaUploadResponse: 包含文件URL和处理信息
+        
+    Raises:
+        HTTPException: 文件类型不支持或处理失败
+    """
+```
+# FastAPI 开发规范
+
+## 项目结构规范
+遵循标准的FastAPI项目结构模式：
+- `main.py` - 应用入口点和配置
+- `app/api/` - API路由和端点
+- `app/core/` - 核心配置和工具
+- `app/services/` - 业务逻辑服务层
+- `app/schemas/` - Pydantic数据模式
+- `app/models/` - 数据库模型（如需要）
+
+## 代码规范
+
+### 导入顺序
+```python
+# 标准库导入
+import os
+from typing import Optional
+
+# 第三方库导入
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+# 本地应用导入
+from app.core.config import settings
+from app.services.media_service import MediaProcessingService
+```
+
+### 异常处理
+- 使用HTTPException抛出API错误
+- 提供清晰的中文错误消息
+- 包含适当的HTTP状态码
+
+```python
+# 正确示例
+raise HTTPException(
+    status_code=400,
+    detail="不支持的文件类型，只支持音频和视频文件"
+)
+```
+
+### 依赖注入
+使用FastAPI的依赖注入系统管理服务：
+
+```python
+def get_media_service() -> MediaProcessingService:
+    """依赖注入：获取媒体处理服务"""
+    return MediaProcessingService()
+
+@router.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    service: MediaProcessingService = Depends(get_media_service)
+):
+    pass
+```
+
+## API端点规范
+
+### 路由定义
+- 使用清晰的路径和HTTP方法
+- 提供summary和description
+- 指定response_model
+
+```python
+@router.post(
+    "/upload",
+    response_model=MediaUploadResponse,
+    summary="上传并处理音视频文件",
+    description="上传音视频文件，自动进行压缩和格式转换，然后上传到云存储"
+)
+```
+
+### 响应模式
+- 所有API响应使用Pydantic模型
+- 提供清晰的字段描述
+- 使用合适的数据类型
+
+```python
+class MediaUploadResponse(BaseModel):
+    success: bool = Field(..., description="上传是否成功")
+    file_url: str = Field(..., description="文件的公开访问URL")
+    message: Optional[str] = Field(None, description="处理信息")
+```
+
+## 异步编程规范
+
+### 异步函数使用
+- 所有I/O操作使用async/await
+- 文件操作使用异步方式
+- 外部API调用异步化
+
+```python
+async def process_file(file: UploadFile) -> str:
+    # 异步读取文件
+    content = await file.read()
+    
+    # 异步执行外部命令
+    process = await asyncio.create_subprocess_exec(...)
+    stdout, stderr = await process.communicate()
+```
+
+## 配置管理规范
+- 使用Pydantic Settings管理配置
+- 支持环境变量覆盖
+- 提供合理的默认值
+
+```python
+class Settings(BaseSettings):
+    """应用程序设置"""
+    supabase_url: Optional[str] = None
+    max_file_size: int = 100 * 1024 * 1024  # 100MB
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+```
+
+## 文档规范
+- 所有函数和类使用中文文档字符串
+- 描述参数、返回值和异常
+- 包含使用示例
+
+```python
+async def upload_media_file(file: UploadFile) -> MediaUploadResponse:
+    """
+    上传并处理媒体文件
+    
+    处理流程：
+    1. 验证文件类型（仅支持音视频文件）
+    2. 检查文件大小，超过10MB则压缩
+    3. 格式转换：音频转mp3，视频转mp4
+    4. 上传到Supabase Storage
+    5. 返回文件URL和处理信息
+    
+    Args:
+        file: 上传的文件
+        
+    Returns:
+        MediaUploadResponse: 包含文件URL和处理信息
+        
+    Raises:
+        HTTPException: 文件类型不支持或处理失败
+    """
+```

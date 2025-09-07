@@ -15,7 +15,6 @@ from fastapi import UploadFile, HTTPException
 
 from app.core.config import settings
 from app.schemas.media import MediaProcessingResult
-import main
 
 
 class MediaProcessingService:
@@ -108,6 +107,53 @@ class MediaProcessingService:
                 compression_ratio=compression_ratio,
                 message=message
             )
+            
+        finally:
+            # 清理临时文件
+            self._cleanup_temp_files(temp_dir)
+    
+    async def preprocess_audio_for_asr(self, audio_data: bytes, original_url: str = "") -> bytes:
+        """
+        为ASR服务预处理音频数据
+        1. 检测文件类型，若为视频则转码为音频
+        2. 将多声道音频转换为单声道
+        
+        Args:
+            audio_data: 原始音频/视频数据
+            original_url: 原始文件URL（用于文件类型检测）
+            
+        Returns:
+            bytes: 处理后的单声道音频数据（WAV格式）
+        """
+        # 创建安全的临时目录
+        temp_dir = self._create_temp_directory()
+        
+        try:
+            # 检测文件类型
+            file_type = self._detect_file_type_from_content(audio_data, original_url)
+            
+            # 根据检测结果确定文件扩展名
+            if file_type == 'video':
+                input_extension = '.mp4'  # 默认视频扩展名
+            elif file_type == 'audio':
+                input_extension = '.mp3'  # 默认音频扩展名
+            else:
+                # 尝试从URL获取扩展名
+                input_extension = self._extract_extension_from_url(original_url) or '.mp3'
+            
+            # 保存原始数据到临时文件
+            input_path = temp_dir / f"input{input_extension}"
+            with open(input_path, "wb") as f:
+                f.write(audio_data)
+            
+            # 处理文件
+            processed_path = await self._preprocess_for_asr(input_path, file_type, temp_dir)
+            
+            # 读取处理后的数据
+            with open(processed_path, "rb") as f:
+                processed_data = f.read()
+            
+            return processed_data
             
         finally:
             # 清理临时文件
@@ -492,3 +538,200 @@ class MediaProcessingService:
         except Exception:
             # 忽略清理错误
             pass 
+
+    def _detect_file_type_from_content(self, data: bytes, url: str = "") -> str:
+        """
+        从文件内容和URL检测文件类型
+        
+        Args:
+            data: 文件二进制数据
+            url: 文件URL（用于扩展名检测）
+            
+        Returns:
+            str: 文件类型 ('audio', 'video', 'unknown')
+        """
+        # 先尝试从URL获取文件类型
+        if url:
+            file_type = self._detect_file_type_from_filename(url)
+            if file_type != 'unknown':
+                return file_type
+        
+        # 基于文件头检测文件类型
+        if len(data) < 12:
+            return 'unknown'
+        
+        # 检查常见的文件头标识
+        header = data[:12]
+        
+        # MP3文件头
+        if header.startswith(b'ID3') or header[0:2] in [b'\xff\xfb', b'\xff\xf3', b'\xff\xf2']:
+            return 'audio'
+        
+        # MP4/M4A文件头 (ftyp)
+        if b'ftyp' in header:
+            # 进一步检查是音频还是视频
+            ftyp_data = data[4:12] if len(data) >= 12 else data[4:]
+            if b'M4A' in ftyp_data or b'mp41' in ftyp_data:
+                return 'audio'
+            else:
+                return 'video'
+        
+        # WAV文件头
+        if header.startswith(b'RIFF') and b'WAVE' in data[:20]:
+            return 'audio'
+        
+        # FLAC文件头
+        if header.startswith(b'fLaC'):
+            return 'audio'
+        
+        # OGG文件头
+        if header.startswith(b'OggS'):
+            return 'audio'
+        
+        # AVI文件头
+        if header.startswith(b'RIFF') and b'AVI ' in data[:20]:
+            return 'video'
+        
+        # MOV文件头
+        if b'moov' in data[:100] or b'mdat' in data[:100]:
+            return 'video'
+        
+        # WebM文件头
+        if header.startswith(b'\x1a\x45\xdf\xa3'):
+            return 'video'
+        
+        # 默认返回未知
+        return 'unknown'
+    
+    def _extract_extension_from_url(self, url: str) -> Optional[str]:
+        """从URL中提取文件扩展名"""
+        if not url:
+            return None
+        
+        try:
+            # 移除查询参数
+            clean_url = url.split('?')[0]
+            # 获取最后一个点后的内容
+            if '.' in clean_url:
+                extension = '.' + clean_url.split('.')[-1].lower()
+                # 验证是否为有效的音视频扩展名
+                valid_extensions = {'.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma', 
+                                  '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v'}
+                if extension in valid_extensions:
+                    return extension
+        except:
+            pass
+        
+        return None
+    
+    async def _preprocess_for_asr(self, input_path: Path, file_type: str, temp_dir: Path) -> Path:
+        """
+        为ASR预处理音频文件
+        
+        Args:
+            input_path: 输入文件路径
+            file_type: 文件类型
+            temp_dir: 临时目录
+            
+        Returns:
+            Path: 处理后的文件路径
+        """
+        # 如果是视频，先提取音频
+        if file_type == 'video':
+            audio_path = temp_dir / "extracted_audio.wav"
+            await self._extract_audio_from_video(input_path, audio_path)
+            input_path = audio_path
+        
+        # 转换为单声道音频
+        mono_path = temp_dir / "mono_audio.wav"
+        await self._convert_to_mono_audio(input_path, mono_path)
+        
+        return mono_path
+    
+    async def _extract_audio_from_video(self, video_path: Path, audio_path: Path):
+        """
+        从视频文件中提取音频
+        
+        Args:
+            video_path: 视频文件路径
+            audio_path: 输出音频文件路径
+        """
+        try:
+            # 使用FFmpeg提取音频
+            stream = ffmpeg.input(str(video_path))
+            stream = ffmpeg.output(
+                stream,
+                str(audio_path),
+                acodec='pcm_s16le',  # WAV格式
+                ar=16000,  # 16kHz采样率，适合ASR
+                ac=1,  # 单声道
+                f='wav'
+            )
+            
+            # 执行转换
+            process = await asyncio.create_subprocess_exec(
+                *ffmpeg.compile(stream, overwrite_output=True),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise Exception(f"FFmpeg audio extraction error: {stderr.decode()}")
+            
+        except Exception as e:
+            # 清理可能的部分输出文件
+            if audio_path.exists():
+                try:
+                    audio_path.unlink()
+                except:
+                    pass
+            raise HTTPException(
+                status_code=500,
+                detail=f"视频音频提取失败: {str(e)}"
+            )
+    
+    async def _convert_to_mono_audio(self, input_path: Path, output_path: Path):
+        """
+        将音频转换为单声道
+        
+        Args:
+            input_path: 输入音频文件路径
+            output_path: 输出音频文件路径
+        """
+        try:
+            # 使用FFmpeg转换为单声道
+            stream = ffmpeg.input(str(input_path))
+            stream = ffmpeg.output(
+                stream,
+                str(output_path),
+                acodec='pcm_s16le',  # WAV格式
+                ar=16000,  # 16kHz采样率，适合ASR
+                ac=1,  # 单声道
+                f='wav'
+            )
+            
+            # 执行转换
+            process = await asyncio.create_subprocess_exec(
+                *ffmpeg.compile(stream, overwrite_output=True),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise Exception(f"FFmpeg mono conversion error: {stderr.decode()}")
+            
+        except Exception as e:
+            # 清理可能的部分输出文件
+            if output_path.exists():
+                try:
+                    output_path.unlink()
+                except:
+                    pass
+            raise HTTPException(
+                status_code=500,
+                detail=f"单声道转换失败: {str(e)}"
+            ) 

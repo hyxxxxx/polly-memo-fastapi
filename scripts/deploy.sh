@@ -144,7 +144,7 @@ health_check() {
     log_info "检查服务健康状态..."
     
     # 检查API健康状态
-    if curl -f http://localhost/health &> /dev/null; then
+    if curl -f http://localhost:8080/health &> /dev/null; then
         log_success "API 服务健康检查通过"
     else
         log_error "API 服务健康检查失败"

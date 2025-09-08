@@ -1,90 +1,110 @@
-# Polly Memo FastAPI - 媒体文件处理服务
+# 鹦鹉背诵 FastAPI - Docker 容器化版
 
-一个基于FastAPI的音视频文件压缩、转换和存储服务，支持自动压缩大文件并上传至Supabase Storage。
+🎯 **AI驱动的中小学背诵作业自动化平台** - 支持Docker容器化一键部署
 
-## 功能特性
+一个基于FastAPI的音视频文件处理和AI背诵分析服务，集成FFmpeg媒体处理、Cloudflare AI语音识别、GLM-4智能分析等功能。
 
-- 🎵 **音频处理**：支持多种音频格式，自动转换为MP3
-- 🎬 **视频处理**：支持多种视频格式，自动转换为MP4
-- 📦 **智能压缩**：文件超过10MB时自动压缩至10MB以内
-- ☁️ **云存储**：集成Supabase Storage，自动上传处理后的文件
-- 📊 **详细反馈**：返回处理前后文件大小和压缩比率信息
-- 🚀 **高性能**：异步处理，支持大文件上传（最大100MB）
+## 🎯 核心功能
 
-## 技术栈
+- 🎵 **音视频文件上传处理** (最大100MB)
+- 🎬 **智能压缩转换** (FFmpeg, MP3/MP4)  
+- 🗣️ **AI语音识别** (Cloudflare Whisper)
+- 🧠 **智能背诵分析** (GLM-4)
+- ☁️ **云存储集成** (Supabase Storage)
+- 🐳 **容器化部署** (Docker + Nginx)
+- 📊 **健康检查监控** (自动重启)
 
-- **FastAPI**: 现代高性能Web框架
-- **FFmpeg**: 音视频处理引擎
-- **Supabase**: 云存储服务
-- **Pydantic**: 数据验证和设置管理
-- **Python 3.12+**: 现代Python特性
+## 🔄 技术栈
 
-## 快速开始
+- **后端**: FastAPI + Python 3.12
+- **媒体处理**: FFmpeg
+- **AI服务**: Cloudflare Workers AI + GLM-4
+- **存储**: Supabase Storage  
+- **容器化**: Docker + Docker Compose
+- **反向代理**: Nginx
+- **包管理**: uv
 
-### 1. 环境准备
+## 🚀 快速开始
 
-确保系统已安装FFmpeg：
-
-```bash
-# macOS
-brew install ffmpeg
-
-# Ubuntu/Debian
-sudo apt update
-sudo apt install ffmpeg
-
-# Windows (使用chocolatey)
-choco install ffmpeg
-```
-
-### 2. 项目设置
+### 使用自动化脚本（推荐）
 
 ```bash
-# 克隆项目
-git clone <your-repository-url>
+# 1. 克隆项目
+git clone https://github.com/your-username/polly-memo-fastapi.git
 cd polly-memo-fastapi
 
-# 安装依赖
-uv sync
+# 2. 运行自动部署脚本
+./scripts/deploy.sh
 
-# 复制环境变量配置
-cp .env.example .env
+# 3. 按提示编辑 .env 文件，然后重新运行
+./scripts/deploy.sh
 ```
 
-### 3. 配置环境变量
-
-编辑 `.env` 文件，设置您的Supabase配置：
+### 手动Docker部署
 
 ```bash
-# Supabase配置
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=your-supabase-anon-key
-SUPABASE_BUCKET_NAME=media-files
+# 1. 配置环境变量
+cp .env.example .env  # 编辑并填入真实API密钥
 
-# 文件处理配置
-MAX_FILE_SIZE=104857600  # 100MB
-TARGET_FILE_SIZE=10485760  # 10MB
-TEMP_DIR=/tmp/media_processing
+# 2. 构建并启动服务
+docker compose up -d
+
+# 3. 查看服务状态
+docker compose ps
 ```
 
-### 4. 启动服务
+## 📋 环境要求
+
+- **Docker** 20.10+
+- **Docker Compose** v2.0+
+- **服务器配置**: 2核2G内存（最小），4核4G内存（推荐）
+
+## 🔧 配置说明
+
+在 `.env` 文件中配置以下必要参数：
+
+```env
+# Supabase 配置
+SUPABASE_KEY=your_supabase_anon_key_here
+
+# Cloudflare Workers AI 配置  
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+
+# GLM-4 模型配置
+GLM4_API_KEY=your_glm4_api_key_here
+```
+
+## 🌐 访问服务
+
+部署成功后，您可以访问：
+
+- **主服务**: http://localhost/
+- **API文档**: http://localhost/docs  
+- **健康检查**: http://localhost/health
+- **监控面板**: http://localhost:3000 (生产环境)
+
+## 🛠️ 管理命令
 
 ```bash
-# 开发模式启动
-uv run uvicorn main:app --reload
+# 查看服务状态
+./scripts/deploy.sh status
 
-# 生产模式启动
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
+# 查看实时日志
+./scripts/deploy.sh logs
+
+# 重启服务
+./scripts/deploy.sh restart
+
+# 停止服务
+./scripts/deploy.sh stop
+
+# 生产环境部署
+./scripts/deploy.sh prod
+
+# 创建备份
+./scripts/deploy.sh backup
 ```
-
-服务将在 `http://localhost:8000` 启动。
-
-## API 文档
-
-启动服务后，访问以下地址查看API文档：
-
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
 
 ## API 使用说明
 
@@ -189,35 +209,29 @@ polly-memo-fastapi/
 3. 在 `app/api/v1/endpoints/` 中添加API端点
 4. 更新路由配置
 
-## 部署
+## 🏗️ 项目架构
 
-### Docker 部署
-
-```dockerfile
-FROM python:3.12-slim
-
-# 安装FFmpeg
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY . .
-
-# 安装依赖
-RUN pip install uv
-RUN uv sync
-
-EXPOSE 8000
-
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Nginx反向代理  │───→│  FastAPI应用容器  │───→│  外部服务依赖    │
+│   - 负载均衡     │    │  - Python 3.12   │    │  - Supabase     │
+│   - SSL终端     │    │  - FFmpeg处理     │    │  - Cloudflare   │
+│   - 静态文件     │    │  - 健康检查       │    │  - GLM-4 API    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-### 环境变量
+## 📖 详细文档
 
-生产环境中请确保正确设置所有必要的环境变量，特别是Supabase相关配置。
+- [完整部署指南](DOCKER_DEPLOYMENT.md) - 详细的Docker部署和运维指南
+- [API文档](http://localhost/docs) - 启动后访问交互式API文档
 
 ## 许可证
 
 MIT License
+
+---
+
+📞 **技术支持**: 查看 [部署指南](DOCKER_DEPLOYMENT.md) 或提交 [Issue](https://github.com/your-username/polly-memo-fastapi/issues)
 
 ## 贡献
 

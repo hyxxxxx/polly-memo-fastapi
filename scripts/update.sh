@@ -330,9 +330,9 @@ main() {
         echo "  🧹 自动清理：清理旧镜像节省空间"
         echo
         echo "🌐 访问地址："
-        echo "  📡 主服务: http://localhost/"
-        echo "  📖 API文档: http://localhost/docs"
-        echo "  🔍 健康检查: http://localhost/health"
+        echo "  📡 主服务: http://localhost:8080/"
+        echo "  📖 API文档: http://localhost:8080/docs"
+        echo "  🔍 健康检查: http://localhost:8080/health"
         echo
     else
         log_error "服务更新后健康检查失败！"

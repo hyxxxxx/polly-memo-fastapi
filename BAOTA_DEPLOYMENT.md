@@ -341,9 +341,16 @@ services:
 ## 🎉 部署完成！
 
 ### 访问您的应用
+
+#### 🌐 通过宝塔反向代理访问（推荐）
 - **主服务**: https://yourdomain.com/
-- **API文档**: https://yourdomain.com/docs
+- **API文档**: https://yourdomain.com/docs  
 - **健康检查**: https://yourdomain.com/health
+
+#### 🔧 直接访问Docker服务（调试用）
+- **主服务**: http://服务器IP:8080/
+- **API文档**: http://服务器IP:8080/docs
+- **健康检查**: http://服务器IP:8080/health
 
 ### 宝塔面板管理
 - **面板地址**: https://yourdomain.com:8888
@@ -553,8 +560,11 @@ chmod -R 755 /www/wwwroot/polly-memo-fastapi
 # 🚀 零宕机更新（推荐）
 ./scripts/update.sh
 
-# 🔍 实时监控验证（可选）
-./scripts/test_zero_downtime.sh
+# 🔍 测试服务是否正常（本地调试）
+curl -f http://localhost:8080/health
+
+# 🌐 测试宝塔代理是否正常（生产环境）
+curl -f https://yourdomain.com/health
 ```
 
 ---

@@ -143,11 +143,13 @@ health_check() {
     # 检查服务状态
     log_info "检查服务健康状态..."
     
-    # 检查API健康状态
+    # 检查API健康状态（通过Nginx代理）
     if curl -f http://localhost:8080/health &> /dev/null; then
-        log_success "API 服务健康检查通过"
+        log_success "API 服务健康检查通过（端口:8080）"
     else
-        log_error "API 服务健康检查失败"
+        log_error "API 服务健康检查失败（端口:8080）"
+        log_info "检查Nginx和API服务状态..."
+        docker compose logs nginx
         docker compose logs polly-memo-api
         exit 1
     fi
@@ -163,9 +165,9 @@ show_access_info() {
     log_success "🎉 部署完成！"
     echo
     echo "访问地址："
-    echo "  🌐 主服务: http://localhost/"
-    echo "  📖 API文档: http://localhost/docs"
-    echo "  🔍 健康检查: http://localhost/health"
+    echo "  🌐 主服务: http://localhost:8080/"
+    echo "  📖 API文档: http://localhost:8080/docs" 
+    echo "  🔍 健康检查: http://localhost:8080/health"
     echo "  📊 监控面板: http://localhost:3000 (如果启用)"
     echo
     echo "常用命令："

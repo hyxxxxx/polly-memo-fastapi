@@ -126,15 +126,24 @@ redeploy_services() {
     local image_name=""
     
     # 首先尝试从docker images中找到匹配的镜像
-    local available_images=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep polly-memo | head -5)
+    local available_images=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep polly-memo | head -10)
+    
+    log_info "可用的polly-memo相关镜像："
+    echo "$available_images"
     
     if [[ -n "$available_images" ]]; then
-        # 优先选择包含完整项目名的镜像
+        # 优先选择包含完整项目名的镜像（精确匹配实际的镜像名称格式）
         for img in $available_images; do
+            # 第一优先级：精确匹配完整的项目名称格式
             if [[ "$img" == *"polly-memo-fastapi-polly-memo-api"* ]]; then
                 image_name="$img"
                 break
-            elif [[ "$img" == *"polly-memo-api"* ]]; then
+            # 第二优先级：匹配Docker Compose生成的格式（带下划线）
+            elif [[ "$img" == *"polly-memo-fastapi_polly-memo-api"* ]]; then
+                image_name="$img"
+                break
+            # 第三优先级：匹配没有项目前缀的格式
+            elif [[ "$img" == *"polly-memo-api"* ]] && [[ "$img" != *"polly-memo-fastapi"* ]]; then
                 image_name="$img"
             fi
         done
@@ -145,10 +154,21 @@ redeploy_services() {
         fi
     fi
     
-    # 如果还是没找到，尝试默认命名方案
+    # 如果还是没找到，尝试默认命名方案（使用实际的项目名称格式）
     if [[ -z "$image_name" ]]; then
         local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-_]//g')
+        # 优先尝试Docker Compose的标准命名格式
         image_name="${project_name}-polly-memo-api:latest"
+        
+        # 检查这个镜像是否存在，如果不存在则尝试其他格式
+        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image_name}$"; then
+            # 尝试带下划线的格式
+            image_name="${project_name}_polly-memo-api:latest"
+            if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image_name}$"; then
+                # 尝试纯项目名格式
+                image_name="polly-memo-api:latest"
+            fi
+        fi
     fi
     
     log_info "使用镜像: $image_name"
@@ -164,20 +184,51 @@ redeploy_services() {
         # 如果镜像名称不对，尝试其他可能的格式
         log_warning "镜像名称 $image_name 启动失败，尝试其他格式..."
         
+        # 先清理失败的容器
+        docker stop "$temp_container_name" &> /dev/null || true
+        docker rm "$temp_container_name" &> /dev/null || true
+        
         # 从所有可用镜像中逐个尝试
+        local found_working_image=false
         for alt_name in $available_images; do
+            # 使用新的容器名称避免冲突
+            local alt_container_name="polly-memo-api-test-alt-$(date +%s)"
             log_info "尝试镜像: $alt_name"
+            
             if docker run -d \
-                --name "$temp_container_name" \
+                --name "$alt_container_name" \
                 --env-file .env \
                 -p 18000:8000 \
                 "$alt_name" \
                 > /dev/null; then
-                image_name="$alt_name"
-                log_success "成功使用镜像: $image_name"
-                break
+                
+                # 重命名容器以便后续使用
+                docker stop "$alt_container_name" &> /dev/null || true
+                docker rm "$alt_container_name" &> /dev/null || true
+                
+                # 用正确的镜像重新启动测试容器
+                if docker run -d \
+                    --name "$temp_container_name" \
+                    --env-file .env \
+                    -p 18000:8000 \
+                    "$alt_name" \
+                    > /dev/null; then
+                    
+                    image_name="$alt_name"
+                    found_working_image=true
+                    log_success "成功使用镜像: $image_name"
+                    break
+                fi
+            else
+                # 清理失败的容器
+                docker stop "$alt_container_name" &> /dev/null || true
+                docker rm "$alt_container_name" &> /dev/null || true
             fi
         done
+        
+        if [[ "$found_working_image" != "true" ]]; then
+            log_error "所有可用镜像都无法启动测试容器"
+        fi
         
         # 如果所有格式都失败，报错退出
         if ! docker ps | grep -q "$temp_container_name"; then
@@ -379,6 +430,81 @@ main() {
 
 # 捕获信号进行清理
 trap 'echo; log_warning "脚本被中断"; exit 1' INT TERM
+
+# 镜像检测调试函数
+debug_image_detection() {
+    echo "=============================================="
+    echo "🔍 镜像检测调试模式"
+    echo "=============================================="
+    
+    log_info "检查Docker环境..."
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker未安装或不在PATH中"
+        return 1
+    fi
+    
+    log_info "列出所有polly-memo相关镜像："
+    local available_images=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep polly-memo)
+    
+    if [[ -z "$available_images" ]]; then
+        log_warning "未找到任何polly-memo相关镜像"
+        log_info "请先运行 'docker compose build' 构建镜像"
+        return 1
+    fi
+    
+    echo "$available_images"
+    echo
+    
+    # 测试镜像选择逻辑
+    log_info "测试镜像选择逻辑..."
+    
+    local image_name=""
+    
+    # 使用与主脚本相同的逻辑
+    for img in $available_images; do
+        if [[ "$img" == *"polly-memo-fastapi-polly-memo-api"* ]]; then
+            image_name="$img"
+            log_success "✅ 第一优先级匹配: $image_name"
+            break
+        elif [[ "$img" == *"polly-memo-fastapi_polly-memo-api"* ]]; then
+            image_name="$img"
+            log_success "✅ 第二优先级匹配: $image_name"
+            break
+        elif [[ "$img" == *"polly-memo-api"* ]] && [[ "$img" != *"polly-memo-fastapi"* ]]; then
+            image_name="$img"
+            log_success "✅ 第三优先级匹配: $image_name"
+        fi
+    done
+    
+    if [[ -z "$image_name" ]]; then
+        image_name=$(echo "$available_images" | head -1)
+        log_warning "使用第一个可用镜像: $image_name"
+    fi
+    
+    echo
+    log_success "最终选择的镜像: $image_name"
+    
+    # 验证镜像是否存在
+    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image_name}$"; then
+        log_success "✅ 镜像存在且可用"
+        
+        # 显示镜像详情
+        log_info "镜像详细信息："
+        docker images | grep "$(echo "$image_name" | cut -d':' -f1)" | head -1
+    else
+        log_error "❌ 镜像不存在"
+        return 1
+    fi
+    
+    echo
+    log_success "🎉 镜像检测调试完成！"
+}
+
+# 检查命令行参数
+if [[ "$1" == "--debug-image" ]]; then
+    debug_image_detection
+    exit $?
+fi
 
 # 运行主函数
 main "$@" 

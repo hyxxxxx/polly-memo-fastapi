@@ -2,7 +2,7 @@
 GLM-4 模型相关的API端点
 """
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from app.schemas.glm4 import (
     GLM4Request, 
@@ -11,6 +11,7 @@ from app.schemas.glm4 import (
     GLM4StreamAPIResponse
 )
 from app.services.glm4_service import glm4_service
+from app.core.auth import api_key_required
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -23,9 +24,13 @@ router = APIRouter()
     "/basic",
     response_model=GLM4APIResponse,
     summary="GLM-4基础调用",
-    description="调用GLM-4模型进行文本生成，返回完整响应结果"
+    description="调用GLM-4模型进行文本生成，返回完整响应结果",
+    dependencies=[Depends(api_key_required)]
 )
-async def glm4_basic_call(request: GLM4Request) -> GLM4APIResponse:
+async def glm4_basic_call(
+    request: GLM4Request,
+    api_key: str = Depends(api_key_required)
+) -> GLM4APIResponse:
     """
     GLM-4模型基础调用接口
     
@@ -66,9 +71,13 @@ async def glm4_basic_call(request: GLM4Request) -> GLM4APIResponse:
 @router.post(
     "/stream", 
     summary="GLM-4流式调用",
-    description="调用GLM-4模型进行流式文本生成，实时返回生成内容"
+    description="调用GLM-4模型进行流式文本生成，实时返回生成内容",
+    dependencies=[Depends(api_key_required)]
 )
-async def glm4_stream_call(request: GLM4StreamRequest):
+async def glm4_stream_call(
+    request: GLM4StreamRequest,
+    api_key: str = Depends(api_key_required)
+):
     """
     GLM-4模型流式调用接口
     

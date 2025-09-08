@@ -7,6 +7,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from app.services.media_service import MediaProcessingService
 from app.schemas.media import MediaUploadResponse, MediaProcessingError
 from app.core.config import settings
+from app.core.auth import api_key_required
 
 router = APIRouter()
 
@@ -20,11 +21,13 @@ def get_media_service() -> MediaProcessingService:
     "/upload",
     response_model=MediaUploadResponse,
     summary="上传并处理音视频文件",
-    description="上传音视频文件，自动进行压缩和格式转换，然后上传到云存储"
+    description="上传音视频文件，自动进行压缩和格式转换，然后上传到云存储",
+    dependencies=[Depends(api_key_required)]
 )
 async def upload_media_file(
     file: UploadFile = File(..., description="音频或视频文件"),
-    media_service: MediaProcessingService = Depends(get_media_service)
+    media_service: MediaProcessingService = Depends(get_media_service),
+    api_key: str = Depends(api_key_required)
 ):
     """
     上传并处理媒体文件

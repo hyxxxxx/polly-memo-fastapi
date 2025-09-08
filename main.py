@@ -10,7 +10,6 @@ from app.core.config import settings
 # 创建FastAPI应用实例
 app = FastAPI(
     title="Polly Memo FastAPI",
-    description="音视频文件压缩、转换和存储服务",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -31,18 +30,29 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    """根路径健康检查"""
+    """
+    根路径健康检查
+    
+    此端点不需要API密钥认证
+    """
     return {
         "message": "Polly Memo FastAPI 媒体处理服务",
         "version": "1.0.0",
-        "status": "running"
+        "status": "running",
+        "authentication": "enabled" if settings.enable_api_key_auth else "disabled",
+        "docs": "/docs"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """应用健康检查"""
+    """
+    应用健康检查
+    
+    此端点不需要API密钥认证
+    """
     return {
         "status": "healthy",
-        "service": "polly-memo-fastapi"
+        "service": "polly-memo-fastapi",
+        "authentication": "enabled" if settings.enable_api_key_auth else "disabled"
     }

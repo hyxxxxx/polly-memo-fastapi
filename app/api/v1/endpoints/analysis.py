@@ -10,6 +10,7 @@ from app.schemas.analysis import (
     RecitationAnalysisResponse,
     RecitationAnalysisError
 )
+from app.core.auth import api_key_required
 
 router = APIRouter()
 
@@ -23,11 +24,13 @@ def get_analysis_service() -> RecitationAnalysisService:
     "/analyze",
     response_model=RecitationAnalysisResponse,
     summary="AI智能背诵分析",
-    description="分析用户背诵录音，提供正确率、熟练度、发音准确度等指标评估"
+    description="分析用户背诵录音，提供正确率、熟练度、发音准确度等指标评估",
+    dependencies=[Depends(api_key_required)]
 )
 async def analyze_recitation(
     request: RecitationAnalysisRequest,
-    analysis_service: RecitationAnalysisService = Depends(get_analysis_service)
+    analysis_service: RecitationAnalysisService = Depends(get_analysis_service),
+    api_key: str = Depends(api_key_required)
 ):
     """
     AI智能背诵分析
@@ -255,9 +258,10 @@ async def analyze_recitation(
 @router.get(
     "/supported-languages",
     summary="获取支持的语言列表",
-    description="获取当前支持的分析语言"
+    description="获取当前支持的分析语言",
+    dependencies=[Depends(api_key_required)]
 )
-async def get_supported_languages():
+async def get_supported_languages(api_key: str = Depends(api_key_required)):
     """
     获取支持的语言列表
     """

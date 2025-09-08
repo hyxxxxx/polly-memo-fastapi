@@ -2,11 +2,16 @@
 应用程序配置设置
 """
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
     """应用程序设置"""
+    
+    # API安全配置
+    api_key: Optional[str] = None  # 主API密钥
+    api_keys: List[str] = []  # 多个API密钥支持，从环境变量JSON数组读取
+    enable_api_key_auth: bool = True  # 是否启用API密钥认证
     
     # Supabase配置
     supabase_url: Optional[str] = None

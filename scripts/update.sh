@@ -122,9 +122,34 @@ redeploy_services() {
     log_info "启动临时容器测试新镜像..."
     local temp_container_name="polly-memo-api-test-$(date +%s)"
     
-    # 动态获取镜像名称
-    local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
-    local image_name="${project_name}-polly-memo-api:latest"
+    # 智能获取镜像名称 - 从实际构建的镜像中查找
+    local image_name=""
+    
+    # 首先尝试从docker images中找到匹配的镜像
+    local available_images=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep polly-memo | head -5)
+    
+    if [[ -n "$available_images" ]]; then
+        # 优先选择包含完整项目名的镜像
+        for img in $available_images; do
+            if [[ "$img" == *"polly-memo-fastapi-polly-memo-api"* ]]; then
+                image_name="$img"
+                break
+            elif [[ "$img" == *"polly-memo-api"* ]]; then
+                image_name="$img"
+            fi
+        done
+        
+        # 如果还没找到，使用第一个可用的镜像
+        if [[ -z "$image_name" ]]; then
+            image_name=$(echo "$available_images" | head -1)
+        fi
+    fi
+    
+    # 如果还是没找到，尝试默认命名方案
+    if [[ -z "$image_name" ]]; then
+        local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-_]//g')
+        image_name="${project_name}-polly-memo-api:latest"
+    fi
     
     log_info "使用镜像: $image_name"
     
@@ -139,8 +164,8 @@ redeploy_services() {
         # 如果镜像名称不对，尝试其他可能的格式
         log_warning "镜像名称 $image_name 启动失败，尝试其他格式..."
         
-        # 尝试使用不同的命名格式
-        for alt_name in "${project_name}_polly-memo-api:latest" "polly-memo-api:latest"; do
+        # 从所有可用镜像中逐个尝试
+        for alt_name in $available_images; do
             log_info "尝试镜像: $alt_name"
             if docker run -d \
                 --name "$temp_container_name" \

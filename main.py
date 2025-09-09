@@ -18,10 +18,29 @@ app = FastAPI(
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境中应该限制具体域名
+    allow_origins=[
+        "http://localhost:3000",  # 本地开发
+        "http://localhost:5173",  # Vite开发服务器
+        "https://*.vercel.app",   # Vercel部署域名
+        "https://pollylearn.com", # 生产域名（如果有）
+        # "*"  # 临时允许所有域名，生产环境应该移除
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "X-API-Key",
+        "X-Api-Key",  # 兼容格式
+        "Authorization",
+        "X-Requested-With",
+        "User-Agent",
+        "Cache-Control",
+        "If-Modified-Since",
+        "Range"
+    ],
 )
 
 # 包含API路由

@@ -15,6 +15,13 @@ api_key_header = APIKeyHeader(
     description="API密钥，通过X-API-Key头部传递"
 )
 
+# 兼容性API密钥头部认证（支持不同大小写格式）
+api_key_header_alt = APIKeyHeader(
+    name="X-Api-Key", 
+    auto_error=False,
+    description="API密钥，通过X-Api-Key头部传递（兼容格式）"
+)
+
 # Bearer token认证
 bearer_auth = HTTPBearer(auto_error=False, description="Bearer token认证")
 
@@ -113,15 +120,17 @@ async def get_api_key_from_bearer(credentials: Optional[HTTPAuthorizationCredent
 
 async def require_api_key(
     header_key: Optional[str] = Security(api_key_header),
+    header_key_alt: Optional[str] = Security(api_key_header_alt),
     bearer_token: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth)
 ) -> str:
     """
-    要求API密钥认证 - 支持两种方式：X-API-Key头部或Bearer token
+    要求API密钥认证 - 支持多种方式：X-API-Key头部、X-Api-Key头部或Bearer token
     
-    优先级：X-API-Key > Authorization: Bearer
+    优先级：X-API-Key > X-Api-Key > Authorization: Bearer
     
     Args:
         header_key: X-API-Key头部值
+        header_key_alt: X-Api-Key头部值（兼容格式）
         bearer_token: Bearer认证凭据
         
     Returns:
@@ -138,14 +147,18 @@ async def require_api_key(
     if header_key and validate_api_key(header_key):
         return header_key
     
-    # 然后尝试Bearer token
+    # 然后尝试X-Api-Key头部（兼容格式）
+    if header_key_alt and validate_api_key(header_key_alt):
+        return header_key_alt
+    
+    # 最后尝试Bearer token
     if bearer_token and bearer_token.credentials and validate_api_key(bearer_token.credentials):
         return bearer_token.credentials
     
     # 都没有找到有效的API密钥
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="需要有效的API密钥。请通过X-API-Key头部或Authorization: Bearer头部提供API密钥",
+        detail="需要有效的API密钥。请通过X-API-Key头部、X-Api-Key头部或Authorization: Bearer头部提供API密钥",
         headers={"WWW-Authenticate": "ApiKey, Bearer"},
     )
 

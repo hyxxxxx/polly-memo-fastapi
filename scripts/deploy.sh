@@ -93,7 +93,7 @@ create_directories() {
 
 # 检查端口占用
 check_ports() {
-    local ports=(80 443 8000)
+    local ports=(8000)  # 只检查API服务端口，宝塔nginx会处理80/443
     
     log_info "检查端口占用情况..."
     
@@ -143,13 +143,12 @@ health_check() {
     # 检查服务状态
     log_info "检查服务健康状态..."
     
-    # 检查API健康状态（通过Nginx代理）
-    if curl -f http://localhost:8080/health &> /dev/null; then
-        log_success "API 服务健康检查通过（端口:8080）"
+    # 检查API健康状态（直接访问API服务）
+    if curl -f http://localhost:8000/health &> /dev/null; then
+        log_success "API 服务健康检查通过（端口:8000）"
     else
-        log_error "API 服务健康检查失败（端口:8080）"
-        log_info "检查Nginx和API服务状态..."
-        docker compose logs nginx
+        log_error "API 服务健康检查失败（端口:8000）"
+        log_info "检查API服务状态和日志..."
         docker compose logs polly-memo-api
         exit 1
     fi
@@ -165,10 +164,15 @@ show_access_info() {
     log_success "🎉 部署完成！"
     echo
     echo "访问地址："
-    echo "  🌐 主服务: http://localhost:8080/"
-    echo "  📖 API文档: http://localhost:8080/docs" 
-    echo "  🔍 健康检查: http://localhost:8080/health"
+    echo "  🌐 主服务: http://localhost:8000/"
+    echo "  📖 API文档: http://localhost:8000/docs" 
+    echo "  🔍 健康检查: http://localhost:8000/health"
     echo "  📊 监控面板: http://localhost:3000 (如果启用)"
+    echo
+    echo "🔧 宝塔部署说明："
+    echo "  - Docker容器已暴露8000端口"
+    echo "  - 请在宝塔面板配置nginx反向代理到 http://127.0.0.1:8000"
+    echo "  - 参考BAOTA_DEPLOYMENT.md获取详细配置说明"
     echo
     echo "常用命令："
     echo "  查看日志: docker compose logs -f"

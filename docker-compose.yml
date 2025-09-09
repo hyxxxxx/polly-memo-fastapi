@@ -8,6 +8,8 @@ services:
       dockerfile: Dockerfile
     container_name: polly-memo-api
     restart: unless-stopped
+    ports:
+      - "8000:8000"  # 直接暴露8000端口给宝塔nginx代理
     environment:
       # Supabase配置
       - SUPABASE_URL=${SUPABASE_URL:-https://zodrgxcwimdhuqhdmehg.supabase.co}
@@ -43,28 +45,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Nginx反向代理
-  nginx:
-    image: nginx:alpine
-    container_name: polly-memo-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"    # 修改：标准HTTP端口
-      - "443:443"  # 修改：标准HTTPS端口
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL证书目录（可选）
-    networks:
-      - polly-memo-network
-    depends_on:
-      - polly-memo-api
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   # 临时媒体文件存储

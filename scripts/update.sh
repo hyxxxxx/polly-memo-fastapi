@@ -289,7 +289,7 @@ health_check() {
     local retry=0
     
     while [[ $retry -lt $max_retries ]]; do
-        if curl -f http://localhost:8080/health &> /dev/null; then
+        if curl -f http://localhost:8000/health &> /dev/null; then
             log_success "生产服务健康检查通过"
             
             # 检查容器状态
@@ -406,9 +406,9 @@ main() {
         echo "  🧹 自动清理：清理旧镜像节省空间"
         echo
         echo "🌐 访问地址："
-        echo "  📡 主服务: http://localhost:8080/"
-        echo "  📖 API文档: http://localhost:8080/docs"
-        echo "  🔍 健康检查: http://localhost:8080/health"
+        echo "  📡 主服务: http://localhost:8000/"
+        echo "  📖 API文档: http://localhost:8000/docs"
+        echo "  🔍 健康检查: http://localhost:8000/health"
         echo
     else
         log_error "服务更新后健康检查失败！"

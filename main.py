@@ -23,7 +23,7 @@ app.add_middleware(
         "http://localhost:5173",  # Vite开发服务器
         "https://*.vercel.app",   # Vercel部署域名
         "https://pollylearn.com", # 生产域名（如果有）
-        # "*"  # 临时允许所有域名，生产环境应该移除
+        "*"  # 临时允许所有域名，生产环境应该移除
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],

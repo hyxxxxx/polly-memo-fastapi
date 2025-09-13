@@ -4,7 +4,7 @@
 """
 import re
 import time
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from difflib import SequenceMatcher
 import aiohttp
 from fastapi import HTTPException
@@ -22,6 +22,13 @@ from app.schemas.analysis import (
     CloudflareASRResponse,
     WordAlignment
 )
+
+
+class PreprocessedText:
+    """预处理后的文本数据结构"""
+    def __init__(self, processed_words: List[str], original_mapping: Dict[str, str]):
+        self.processed_words = processed_words  # 处理后的分词列表
+        self.original_mapping = original_mapping  # 处理后分词到原始分词的映射
 
 
 class RecitationAnalysisService:
@@ -48,21 +55,21 @@ class RecitationAnalysisService:
             # 1. 调用ASR接口获取转录文本
             asr_result = await self._call_asr_api(request.audio_url, request.language)
             
-            # 2. 预处理文本
-            original_words = self._preprocess_text(request.original_text)
-            recognized_words = self._preprocess_text(asr_result.text)
+            # 2. 预处理文本，获取处理后分词和原始映射
+            original_preprocessed = self._preprocess_text(request.original_text)
+            recognized_preprocessed = self._preprocess_text(asr_result.text)
             
             # 3. 进行词语对齐
             word_alignments = self._align_words(
-                original_words, 
-                recognized_words, 
+                original_preprocessed.processed_words, 
+                recognized_preprocessed.processed_words, 
                 asr_result.words
             )
             
             # 4. 计算各种评分
             analysis = self._calculate_analysis_scores(
-                original_words, 
-                recognized_words, 
+                original_preprocessed, 
+                recognized_preprocessed, 
                 word_alignments, 
                 asr_result
             )
@@ -162,32 +169,43 @@ class RecitationAnalysisService:
         except Exception as e:
             raise Exception(f"ASR处理失败: {str(e)}")
     
-    def _preprocess_text(self, text: str) -> List[str]:
+    def _preprocess_text(self, text: str) -> PreprocessedText:
         """
-        文本预处理：清理标点符号，分词
+        文本预处理：清理标点符号，分词，并维护原始分词映射
         
         Args:
             text: 原始文本
             
         Returns:
-            List[str]: 处理后的单词列表
+            PreprocessedText: 包含处理后分词和原始映射的数据结构
         """
-        # 移除标点符号
-        text = re.sub(r'[^\w\s\u4e00-\u9fff]', '', text)
-        
-        # 转换为小写（对英文）
-        text = text.lower()
-        
-        # 分词（简单按空格分割，中文字符单独处理）
+        # 先进行原始分词（保留标点符号和大小写）
         if self._is_chinese_text(text):
             # 中文按字符分割
-            words = [char for char in text if char.strip()]
+            original_words = [char for char in text if char.strip()]
         else:
             # 英文按空格分割
-            words = text.split()
+            original_words = text.split()
         
         # 过滤空字符串
-        return [word for word in words if word.strip()]
+        original_words = [word for word in original_words if word.strip()]
+        
+        # 对每个原始词进行预处理
+        processed_words = []
+        original_mapping = {}
+        
+        for original_word in original_words:
+            # 移除标点符号
+            processed_word = re.sub(r'[^\w\s\u4e00-\u9fff]', '', original_word)
+            # 转换为小写（对英文）
+            processed_word = processed_word.lower()
+            
+            # 只保留非空的处理后词语
+            if processed_word.strip():
+                processed_words.append(processed_word)
+                original_mapping[processed_word] = original_word
+        
+        return PreprocessedText(processed_words, original_mapping)
     
     def _is_chinese_text(self, text: str) -> bool:
         """判断文本是否主要包含中文字符"""
@@ -334,8 +352,8 @@ class RecitationAnalysisService:
     
     def _calculate_analysis_scores(
         self, 
-        expected_words: List[str], 
-        recognized_words: List[str], 
+        expected_preprocessed: PreprocessedText, 
+        recognized_preprocessed: PreprocessedText, 
         word_alignments: List[WordAlignment],
         asr_result: ASRResponse
     ) -> RecitationAnalysis:
@@ -343,8 +361,8 @@ class RecitationAnalysisService:
         计算各种分析评分
         
         Args:
-            expected_words: 期望单词列表
-            recognized_words: 识别单词列表
+            expected_preprocessed: 预处理后的期望单词列表和原始映射
+            recognized_preprocessed: 预处理后的识别单词列表和原始映射
             word_alignments: 词语对齐结果
             asr_result: ASR结果
             
@@ -352,7 +370,7 @@ class RecitationAnalysisService:
             RecitationAnalysis: 完整分析结果
         """
         # 统计基本指标
-        total_words = len(expected_words)
+        total_words = len(expected_preprocessed.processed_words)
         correct_words = sum(1 for alignment in word_alignments if alignment.is_match)
         word_accuracy = (correct_words / total_words * 100) if total_words > 0 else 0
         
@@ -364,14 +382,18 @@ class RecitationAnalysisService:
         
         for alignment in word_alignments:
             if alignment.expected_word and alignment.actual_word:
-                # 匹配的词
+                # 匹配的词 - 使用原始分词
                 score = alignment.similarity * 100
                 is_correct = alignment.is_match
                 
+                # 从映射中获取原始分词
+                original_expected = expected_preprocessed.original_mapping.get(alignment.expected_word, alignment.expected_word)
+                original_actual = recognized_preprocessed.original_mapping.get(alignment.actual_word, alignment.actual_word)
+                
                 word_details.append(WordScore(
-                    word=alignment.expected_word,
-                    expected=alignment.expected_word,
-                    actual=alignment.actual_word,
+                    word=original_expected,  # 使用原始分词
+                    expected=original_expected,  # 使用原始分词
+                    actual=original_actual,  # 使用原始分词
                     score=score,
                     start_time=alignment.start_time,
                     end_time=alignment.end_time,
@@ -379,14 +401,16 @@ class RecitationAnalysisService:
                 ))
                 
                 if not is_correct:
-                    mispronounced_words.append(alignment.expected_word)
+                    # mispronounced_words 也使用原始分词
+                    mispronounced_words.append(original_expected)
                     
             elif alignment.expected_word and not alignment.actual_word:
-                # 遗漏的词
-                missing_words.append(alignment.expected_word)
+                # 遗漏的词 - 使用原始分词
+                original_expected = expected_preprocessed.original_mapping.get(alignment.expected_word, alignment.expected_word)
+                missing_words.append(original_expected)
                 word_details.append(WordScore(
-                    word=alignment.expected_word,
-                    expected=alignment.expected_word,
+                    word=original_expected,  # 使用原始分词
+                    expected=original_expected,  # 使用原始分词
                     actual="",
                     score=0.0,
                     start_time=0.0,
@@ -394,8 +418,9 @@ class RecitationAnalysisService:
                     is_correct=False
                 ))
             elif not alignment.expected_word and alignment.actual_word:
-                # 多余的词
-                extra_words.append(alignment.actual_word)
+                # 多余的词 - 使用原始分词
+                original_actual = recognized_preprocessed.original_mapping.get(alignment.actual_word, alignment.actual_word)
+                extra_words.append(original_actual)
         
         # 计算各项评分
         pronunciation_score = self._calculate_pronunciation_score(word_alignments)

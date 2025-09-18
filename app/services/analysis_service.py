@@ -142,6 +142,16 @@ class RecitationAnalysisService:
                 
                 response_data = await response.json()
                 
+                # 修复Cloudflare API响应格式问题：确保words字段始终是列表
+                if "result" in response_data and "words" in response_data["result"]:
+                    words_data = response_data["result"]["words"]
+                    # 如果words是单个字典对象，将其转换为列表
+                    if isinstance(words_data, dict):
+                        response_data["result"]["words"] = [words_data]
+                    elif not isinstance(words_data, list):
+                        # 如果不是字典也不是列表，创建空列表
+                        response_data["result"]["words"] = []
+                
                 # 解析响应
                 cf_response = CloudflareASRResponse(**response_data)
                 

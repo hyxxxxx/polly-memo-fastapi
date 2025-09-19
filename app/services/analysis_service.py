@@ -4,6 +4,7 @@
 """
 import re
 import time
+import logging
 from typing import List, Optional, Dict, Tuple
 from difflib import SequenceMatcher
 import aiohttp
@@ -20,8 +21,12 @@ from app.schemas.analysis import (
     ASRResponse,
     ASRWord,
     CloudflareASRResponse,
-    WordAlignment
+    WordAlignment,
+    WhisperASRResponse
 )
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
 
 
 class PreprocessedText:
@@ -50,10 +55,12 @@ class RecitationAnalysisService:
             RecitationAnalysisResponse: 完整的分析结果
         """
         start_time = time.time()
+        logger.info(f"开始背诵分析 - 音频URL: {request.audio_url}")
         
         try:
             # 1. 调用ASR接口获取转录文本
             asr_result = await self._call_asr_api(request.audio_url, request.language)
+            logger.info(f"ASR识别完成 - 原始文本: '{request.original_text}', 识别文本: '{asr_result.text}', 识别词数: {asr_result.word_count}")
             
             # 2. 预处理文本，获取处理后分词和原始映射
             original_preprocessed = self._preprocess_text(request.original_text)
@@ -73,9 +80,9 @@ class RecitationAnalysisService:
                 word_alignments, 
                 asr_result
             )
-        
             
             processing_time = time.time() - start_time
+            logger.info(f"背诵分析完成 - 用时: {processing_time:.2f}s")
             
             return RecitationAnalysisResponse(
                 success=True,
@@ -84,6 +91,8 @@ class RecitationAnalysisService:
             )
             
         except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"背诵分析失败 - 用时: {processing_time:.2f}s, 错误: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"背诵分析失败: {str(e)}"
@@ -91,26 +100,17 @@ class RecitationAnalysisService:
     
     async def _call_asr_api(self, audio_url: str, language: str = "zh") -> ASRResponse:
         """
-        调用Cloudflare的Whisper ASR API
+        调用新的Whisper ASR API
         
         Args:
-            audio_url: 音频文件URL
+            audio_url: 音频文件URL（必须是MP3格式）
             language: 语言代码（zh中文，en英文）
             
         Returns:
             ASRResponse: ASR识别结果
         """
         try:
-            # 构建API URL
-            api_url = f"{settings.asr_api_base_url}/{settings.cloudflare_account_id}/ai/run/{settings.asr_model}"
-            if language:
-                api_url += f"?language={language}"
-            
-            # 设置请求头
-            headers = {
-                "Authorization": f"Bearer {settings.cloudflare_api_token}",
-                "Content-Type": "application/octet-stream"
-            }
+            logger.info("开始ASR音频处理")
             
             # 创建会话（如果不存在）
             if not self.session:
@@ -129,55 +129,102 @@ class RecitationAnalysisService:
                 processed_audio_data = await self.media_service.preprocess_audio_for_asr(
                     audio_data, audio_url
                 )
+                logger.info("音频预处理完成")
             except Exception as e:
                 # 如果预处理失败，使用原始数据作为后备方案
-                print(f"音频预处理失败，使用原始数据: {str(e)}")
+                logger.warning(f"音频预处理失败，使用原始数据: {str(e)}")
                 processed_audio_data = audio_data
             
-            # 调用ASR API
-            async with self.session.post(api_url, headers=headers, data=processed_audio_data) as response:
+            # 上传预处理后的音频文件到Supabase
+            processed_audio_url = await self._upload_processed_audio(processed_audio_data)
+            
+            # 调用新的Whisper ASR API（GET请求）
+            logger.info("开始调用Whisper ASR API")
+            async with self.session.get(settings.whisper_api_url, params={
+                "url": processed_audio_url
+            }) as response:
                 if response.status != 200:
                     error_text = await response.text()
                     raise Exception(f"ASR API调用失败: HTTP {response.status}, {error_text}")
                 
                 response_data = await response.json()
                 
-                # 修复Cloudflare API响应格式问题：确保words字段始终是列表
-                if "result" in response_data and "words" in response_data["result"]:
-                    words_data = response_data["result"]["words"]
-                    # 如果words是单个字典对象，将其转换为列表
-                    if isinstance(words_data, dict):
-                        response_data["result"]["words"] = [words_data]
-                    elif not isinstance(words_data, list):
-                        # 如果不是字典也不是列表，创建空列表
-                        response_data["result"]["words"] = []
+                # 解析新API的响应格式
+                whisper_response = WhisperASRResponse(**response_data)
                 
-                # 解析响应
-                cf_response = CloudflareASRResponse(**response_data)
-                
-                if not cf_response.success:
-                    error_msg = ", ".join(cf_response.errors) if cf_response.errors else "未知错误"
-                    raise Exception(f"ASR识别失败: {error_msg}")
-                
-                # 转换单词数据格式
+                # 转换为统一的ASRResponse格式
                 asr_words = []
-                for word_data in cf_response.result.words:
-                    asr_words.append(ASRWord(
-                        word=word_data.word,
-                        start=word_data.start,
-                        end=word_data.end,
-                        confidence=None
-                    ))
+                
+                # 从segments中提取所有单词信息
+                for segment in whisper_response.segments:
+                    for word_data in segment.words:
+                        asr_words.append(ASRWord(
+                            word=word_data.word,
+                            start=word_data.start,
+                            end=word_data.end,
+                            confidence=None  # 新API不提供置信度信息
+                        ))
+                
+                logger.info(f"ASR API调用成功 - 识别词数: {whisper_response.word_count}")
                 
                 return ASRResponse(
-                    text=cf_response.result.text,
-                    word_count=cf_response.result.word_count,
+                    text=whisper_response.text,
+                    word_count=whisper_response.word_count,
                     words=asr_words,
-                    vtt=cf_response.result.vtt
+                    vtt=whisper_response.vtt
                 )
                 
         except Exception as e:
+            logger.error(f"ASR处理失败: {str(e)}", exc_info=True)
             raise Exception(f"ASR处理失败: {str(e)}")
+    
+    async def _upload_processed_audio(self, audio_data: bytes) -> str:
+        """
+        上传预处理后的音频文件到Supabase Storage
+        
+        Args:
+            audio_data: 预处理后的音频数据
+            
+        Returns:
+            str: 上传后的音频文件URL
+        """
+        import tempfile
+        import os
+        from datetime import datetime
+        
+        temp_file = None
+        
+        try:
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+                temp_file.write(audio_data)
+                temp_file_path = temp_file.name
+            
+            # 生成当前月份的文件夹路径
+            current_month = datetime.now().strftime("%Y-%m")
+            file_type = f"temp_preprocess_files/{current_month}"
+            
+            # 上传到Supabase Storage
+            from pathlib import Path
+            upload_url = await self.media_service._upload_to_supabase(
+                file_path=Path(temp_file_path),
+                file_type=file_type,
+                original_content_type="audio/mpeg"
+            )
+            
+            logger.info("预处理音频上传完成")
+            return upload_url
+            
+        except Exception as e:
+            logger.error(f"预处理音频上传失败: {str(e)}", exc_info=True)
+            raise
+        finally:
+            # 清理临时文件
+            if temp_file and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except Exception as cleanup_error:
+                    logger.warning(f"清理临时文件失败: {cleanup_error}")
     
     def _preprocess_text(self, text: str) -> PreprocessedText:
         """

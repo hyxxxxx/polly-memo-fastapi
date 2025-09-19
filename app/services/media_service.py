@@ -6,6 +6,7 @@ import tempfile
 import asyncio
 import uuid
 import hashlib
+import logging
 from pathlib import Path
 from typing import Tuple, Optional
 import ffmpeg
@@ -16,14 +17,21 @@ from fastapi import UploadFile, HTTPException
 from app.core.config import settings
 from app.schemas.media import MediaProcessingResult
 
+# 配置日志记录器
+logger = logging.getLogger(__name__)
+
 
 class MediaProcessingService:
     """媒体文件处理服务"""
     
     def __init__(self):
+        # 检查Supabase配置是否完整
+        if not settings.supabase_url or not settings.supabase_key:
+            raise ValueError("Supabase配置不完整，请检查SUPABASE_URL和SUPABASE_KEY环境变量")
+        
         self.supabase: Client = create_client(
-            settings.supabase_url,
-            settings.supabase_key
+            str(settings.supabase_url),  # 类型断言，确保不为None
+            str(settings.supabase_key)   # 类型断言，确保不为None
         )
     
     async def process_and_upload_file(self, file: UploadFile) -> MediaProcessingResult:
@@ -125,6 +133,8 @@ class MediaProcessingService:
         Returns:
             bytes: 处理后的单声道音频数据（WAV格式）
         """
+        logger.info("开始音频预处理")
+        
         # 创建安全的临时目录
         temp_dir = self._create_temp_directory()
         
@@ -135,6 +145,7 @@ class MediaProcessingService:
             # 根据检测结果确定文件扩展名
             if file_type == 'video':
                 input_extension = '.mp4'  # 默认视频扩展名
+                logger.info("检测为视频文件，将提取音频")
             elif file_type == 'audio':
                 input_extension = '.mp3'  # 默认音频扩展名
             else:
@@ -153,8 +164,12 @@ class MediaProcessingService:
             with open(processed_path, "rb") as f:
                 processed_data = f.read()
             
+            logger.info("音频预处理完成")
             return processed_data
             
+        except Exception as e:
+            logger.error(f"ASR音频预处理失败: {str(e)}", exc_info=True)
+            raise
         finally:
             # 清理临时文件
             self._cleanup_temp_files(temp_dir)
@@ -516,14 +531,19 @@ class MediaProcessingService:
 
                 # 处理不同类型的返回值
                 if isinstance(public_url_response, dict):
-                    return public_url_response.get('publicURL', public_url_response.get('publicUrl', ''))
+                    final_url = public_url_response.get('publicURL', public_url_response.get('publicUrl', ''))
                 else:
-                    return str(public_url_response)
+                    final_url = str(public_url_response)
+                
+                logger.info("文件上传到Supabase成功")
+                return final_url
                 
             except Exception as upload_error:
+                logger.error(f"Supabase上传失败: {str(upload_error)}", exc_info=True)
                 raise Exception(f"Upload failed: {str(upload_error)}")
             
         except Exception as e:
+            logger.error(f"文件上传到Supabase失败: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"文件上传失败: {str(e)}"
@@ -638,11 +658,13 @@ class MediaProcessingService:
         """
         # 如果是视频，先提取音频
         if file_type == 'video':
+            logger.info("正在从视频中提取音频")
             audio_path = temp_dir / "extracted_audio.wav"
             await self._extract_audio_from_video(input_path, audio_path)
             input_path = audio_path
         
         # 转换为单声道音频
+        logger.info("正在转换为单声道音频")
         mono_path = temp_dir / "mono_audio.wav"
         await self._convert_to_mono_audio(input_path, mono_path)
         

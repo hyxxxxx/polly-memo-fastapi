@@ -1,6 +1,7 @@
 """
 背诵分析API端点
 """
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
@@ -11,6 +12,9 @@ from app.schemas.analysis import (
     RecitationAnalysisError
 )
 from app.core.auth import api_key_required
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -51,16 +55,23 @@ async def analyze_recitation(
     4. 多维度评分计算和错误统计
     5. 生成AI反馈和改进建议
     """
+    logger.info(f"开始背诵分析请求 - 语言: {request.language}, 文本长度: {len(request.original_text)}")
+    
     try:
         # 使用异步上下文管理器确保资源正确清理
         async with analysis_service:
             result = await analysis_service.analyze_recitation(request)
+            
+            logger.info(f"背诵分析完成 - 用时: {result.processing_time:.2f}s, 得分: {result.analysis.scores.overall_score:.1f}/10, 准确率: {result.analysis.word_accuracy:.1f}%")
+            
             return result
             
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"背诵分析HTTP异常 - {e.status_code}: {e.detail}")
         # 重新抛出HTTP异常
         raise
     except Exception as e:
+        logger.error(f"背诵分析处理异常: {str(e)}", exc_info=True)
         # 处理其他异常
         error_response = RecitationAnalysisError(
             success=False,

@@ -131,4 +131,46 @@ class ProcessingResult(BaseModel):
     asr_response: ASRResponse = Field(..., description="ASR识别结果")
     word_alignments: List[WordAlignment] = Field(..., description="词语对齐结果")
     analysis: RecitationAnalysis = Field(..., description="分析结果")
-    processing_time: float = Field(..., description="处理时间") 
+    processing_time: float = Field(..., description="处理时间")
+
+
+# 新的Whisper ASR API响应模式
+class WhisperWord(BaseModel):
+    """Whisper API返回的单词信息"""
+    
+    start: float = Field(..., description="开始时间")
+    end: float = Field(..., description="结束时间")
+    word: str = Field(..., description="单词内容")
+
+
+class WhisperSegment(BaseModel):
+    """Whisper API返回的分段信息"""
+    
+    start: float = Field(..., description="分段开始时间")
+    end: float = Field(..., description="分段结束时间")
+    text: str = Field(..., description="分段文本")
+    temperature: float = Field(..., description="温度参数")
+    avg_logprob: float = Field(..., description="平均对数概率")
+    compression_ratio: float = Field(..., description="压缩比")
+    no_speech_prob: float = Field(..., description="无语音概率")
+    words: List[WhisperWord] = Field(..., description="该分段的单词列表")
+    word_count: int = Field(..., description="该分段的单词数")
+
+
+class WhisperTranscriptionInfo(BaseModel):
+    """Whisper转录信息"""
+    
+    language: str = Field(..., description="检测到的语言")
+    language_probability: float = Field(..., description="语言检测置信度")
+    duration: float = Field(..., description="音频总时长")
+    duration_after_vad: float = Field(..., description="VAD后的音频时长")
+
+
+class WhisperASRResponse(BaseModel):
+    """新的Whisper ASR API响应模式"""
+    
+    transcription_info: WhisperTranscriptionInfo = Field(..., description="转录基本信息")
+    segments: List[WhisperSegment] = Field(..., description="分段信息")
+    vtt: str = Field(..., description="WebVTT格式字幕")
+    text: str = Field(..., description="完整转录文本")
+    word_count: int = Field(..., description="总单词数") 

@@ -48,10 +48,16 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 # 复制应用代码
 COPY --chown=appuser:appuser . .
 
-# 创建临时文件目录
+# 创建临时文件目录和日志目录
 RUN mkdir -p /tmp/media_processing && \
     chown -R appuser:appuser /tmp/media_processing && \
-    chmod 755 /tmp/media_processing
+    chmod 755 /tmp/media_processing && \
+    mkdir -p /www/wwwlogs/polly-memo-fastapi && \
+    chown -R appuser:appuser /www/wwwlogs/polly-memo-fastapi && \
+    chmod 755 /www/wwwlogs/polly-memo-fastapi
+
+# 配置数据卷，确保日志持久化
+VOLUME ["/www/wwwlogs/polly-memo-fastapi"]
 
 # 切换到应用用户
 USER appuser

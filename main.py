@@ -3,9 +3,6 @@ FastAPI 媒体文件处理应用主入口
 """
 import logging
 import sys
-import os
-from logging.handlers import TimedRotatingFileHandler
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,43 +12,19 @@ from app.core.config import settings
 # 配置日志系统
 def setup_logging():
     """设置日志配置"""
-    # 创建日志目录
-    log_dir = Path("/www/wwwlogs/polly-memo-fastapi")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 日志文件路径
-    log_file = log_dir / "app.log"
-    
     # 配置日志格式
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     
-    # 创建处理器
-    handlers = []
-    
-    # 控制台输出处理器
+    # 只使用控制台输出处理器
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
-    handlers.append(console_handler)
-    
-    # 文件输出处理器（按天轮转，保留7天）
-    file_handler = TimedRotatingFileHandler(
-        filename=str(log_file),
-        when="midnight",        # 每天午夜轮转
-        interval=1,             # 间隔1天
-        backupCount=7,          # 保留7个备份文件
-        encoding="utf-8",       # 支持中文
-        utc=False               # 使用本地时间
-    )
-    file_handler.setFormatter(formatter)
-    file_handler.suffix = "%Y-%m-%d"  # 日志文件后缀格式
-    handlers.append(file_handler)
     
     # 配置根日志记录器
     logging.basicConfig(
         level=logging.INFO,
-        handlers=handlers,
+        handlers=[console_handler],
         force=True  # 强制重新配置
     )
 

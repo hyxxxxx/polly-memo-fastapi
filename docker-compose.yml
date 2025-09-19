@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 主应用服务
   polly-memo-api:
@@ -38,8 +36,6 @@ services:
     volumes:
       # 临时文件存储
       - temp_media:/tmp/media_processing
-      # 日志文件存储
-      - ./logs:/www/wwwlogs/polly-memo-fastapi
     networks:
       - polly-memo-network
     healthcheck:

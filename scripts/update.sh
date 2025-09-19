@@ -110,9 +110,24 @@ check_service_status() {
     docker compose ps
 }
 
+# 准备部署环境
+prepare_deployment() {
+    log_info "准备部署环境..."
+    
+    # 基本环境检查
+    if [[ ! -f ".env" ]]; then
+        log_warning ".env文件不存在，请确保环境变量配置正确"
+    fi
+    
+    log_success "部署环境准备完成"
+}
+
 # 零宕机重新部署
 redeploy_services() {
     log_info "开始零宕机部署..."
+    
+    # 准备部署环境
+    prepare_deployment
     
     # 第一步：构建新镜像（不停止现有服务）
     log_info "构建新Docker镜像（不影响当前服务）..."
@@ -390,6 +405,7 @@ main() {
     backup_current_version
     check_service_status
     update_code
+    prepare_deployment
     redeploy_services
     
     # 健康检查

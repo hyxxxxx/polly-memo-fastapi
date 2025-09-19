@@ -8,16 +8,6 @@ echo "开始部署 Polly Memo FastAPI..."
 
 # 项目根目录
 PROJECT_ROOT="/www/wwwroot/polly-memo-fastapi"
-LOG_DIR="$PROJECT_ROOT/logs"
-
-# 创建日志目录
-echo "创建日志目录..."
-mkdir -p "$LOG_DIR"
-
-# 设置日志目录权限（1000:1000对应容器内的appuser）
-echo "设置日志目录权限..."
-chown -R 1000:1000 "$LOG_DIR"
-chmod -R 755 "$LOG_DIR"
 
 # 停止现有容器
 echo "停止现有容器..."
@@ -55,14 +45,9 @@ for i in {1..5}; do
 done
 
 echo "✅ 部署完成！"
-echo "📊 日志位置: $LOG_DIR"
 echo "🌐 API文档: http://你的域名/docs"
 echo "💚 健康检查: http://你的域名/health"
 
-# 显示最新日志
-echo "📝 最新应用日志:"
-if [ -f "$LOG_DIR/app.log" ]; then
-    tail -20 "$LOG_DIR/app.log"
-else
-    echo "日志文件尚未生成，请稍后查看"
-fi 
+# 显示容器日志
+echo "📝 最新容器日志:"
+docker compose logs --tail=20 polly-memo-api || echo "无法获取日志，请稍后查看" 

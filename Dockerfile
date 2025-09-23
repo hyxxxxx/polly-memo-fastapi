@@ -9,14 +9,10 @@ WORKDIR /app
 #     build-essential \
 #     && rm -rf /var/lib/apt/lists/*
 
-# 安装uv包管理器
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
 # 复制项目配置文件
 COPY pyproject.toml uv.lock* ./
 
-# 创建虚拟环境并安装依赖
+# 创建虚拟环境并安装依赖（使用系统已安装的uv）
 RUN uv sync --frozen --no-dev
 
 # 生产阶段

@@ -1,14 +1,18 @@
 # 多阶段构建优化镜像大小
-FROM python:3.12-slim as builder
+FROM registry.access.redhat.com/ubi9/python-312:latest as builder
 
 # 设置工作目录
 WORKDIR /app
 
 # 安装构建依赖
-RUN apt-get update && apt-get install -y \
+USER root
+RUN yum update -y && yum install -y \
     curl \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    gcc \
+    gcc-c++ \
+    make \
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
 
 # 安装uv包管理器
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -21,7 +25,7 @@ COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-dev
 
 # 生产阶段
-FROM python:3.12-slim
+FROM registry.access.redhat.com/ubi9/python-312:latest
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
@@ -29,15 +33,16 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PATH="/app/.venv/bin:$PATH"
 
 # 创建应用用户
+USER root
 RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # 安装运行时依赖
-RUN apt-get update && apt-get install -y \
+RUN yum update -y && yum install -y \
     ffmpeg \
     curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
 
 # 设置工作目录
 WORKDIR /app

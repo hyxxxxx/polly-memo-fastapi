@@ -9,10 +9,13 @@ WORKDIR /app
 #     build-essential \
 #     && rm -rf /var/lib/apt/lists/*
 
+# 安装uv包管理器
+RUN pip install uv
+
 # 复制项目配置文件
 COPY pyproject.toml uv.lock* ./
 
-# 创建虚拟环境并安装依赖（使用系统已安装的uv）
+# 创建虚拟环境并安装依赖
 RUN uv sync --frozen --no-dev
 
 # 生产阶段

@@ -6,7 +6,6 @@ WORKDIR /app
 
 # 安装构建依赖
 RUN apt-get update && apt-get install -y \
-    curl \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,7 +31,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
-# 安装运行时依赖(手动安装)
+# 安装运行时依赖
 # RUN apt-get update && apt-get install -y \
 #     ffmpeg \
 #     curl \

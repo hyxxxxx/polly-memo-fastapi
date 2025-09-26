@@ -1,64 +1,67 @@
-# 使用官方Python 3.12 slim镜像作为基础镜像
-FROM python:3.12-slim
+# 多阶段构建优化镜像大小
+FROM python:3.12-slim as builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 设置环境变量
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PATH="/root/.cargo/bin:$PATH"
-
-# 安装系统依赖
+# 安装构建依赖
 RUN apt-get update && apt-get install -y \
-    # FFmpeg 及其依赖（用于音视频处理）
-    ffmpeg \
-    libavcodec-extra \
-    # 构建工具和其他依赖
     curl \
     build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装uv包管理器
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# 复制项目配置文件
+COPY pyproject.toml uv.lock* ./
+
+# 创建虚拟环境并安装依赖
+RUN uv sync --frozen --no-dev
+
+# 生产阶段
+FROM python:3.12-slim
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PATH="/app/.venv/bin:$PATH"
+
+# 创建应用用户
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# 安装uv包管理器
-RUN pip install uv
+# 设置工作目录
+WORKDIR /app
 
-# 复制项目配置文件
-COPY pyproject.toml uv.lock ./
+# 从构建阶段复制虚拟环境
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 
-# 使用uv安装Python依赖
-RUN uv sync --frozen --no-dev
+# 复制应用代码
+COPY --chown=appuser:appuser . .
 
-# 复制应用源码
-COPY . .
-
-# 创建必要的目录
+# 创建临时文件目录
 RUN mkdir -p /tmp/media_processing && \
+    chown -R appuser:appuser /tmp/media_processing && \
     chmod 755 /tmp/media_processing
 
-# 创建非root用户运行应用
-RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
-    chown -R appuser:appuser /app /tmp/media_processing
-
-# 设置uv缓存目录环境变量（避免权限问题）
-ENV UV_CACHE_DIR=/tmp/uv-cache \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
-
-# 创建uv缓存目录并设置权限
-RUN mkdir -p /tmp/uv-cache && \
-    chown -R appuser:appuser /tmp/uv-cache
-
-# 切换到非root用户
+# 切换到应用用户
 USER appuser
-
-# 暴露端口
-EXPOSE 9000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:9000/health || exit 1
 
-# 启动命令 - 使用uvicorn提供更好的性能和生产环境支持
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000", "--workers", "1"] 
+# 暴露端口
+EXPOSE 9000
+
+# 启动命令
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000", "--workers", "1"] 

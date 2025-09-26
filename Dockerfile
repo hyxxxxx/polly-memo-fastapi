@@ -39,8 +39,16 @@ RUN mkdir -p /tmp/media_processing && \
     chmod 755 /tmp/media_processing
 
 # 创建非root用户运行应用
-RUN groupadd -r appuser && useradd -r -g appuser appuser && \
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
     chown -R appuser:appuser /app /tmp/media_processing
+
+# 设置uv缓存目录环境变量（避免权限问题）
+ENV UV_CACHE_DIR=/tmp/uv-cache \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+# 创建uv缓存目录并设置权限
+RUN mkdir -p /tmp/uv-cache && \
+    chown -R appuser:appuser /tmp/uv-cache
 
 # 切换到非root用户
 USER appuser

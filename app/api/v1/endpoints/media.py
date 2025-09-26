@@ -36,7 +36,7 @@ async def upload_media_file(
     1. 验证文件类型（仅支持音视频文件）
     2. 检查文件大小，超过10MB则压缩
     3. 格式转换：音频转mp3，视频转mp4
-    4. 上传到Supabase Storage
+    4. 上传到COS
     5. 返回文件URL和处理信息
     """
     try:

@@ -135,7 +135,7 @@ class RecitationAnalysisService:
                 logger.warning(f"音频预处理失败，使用原始数据: {str(e)}")
                 processed_audio_data = audio_data
             
-            # 上传预处理后的音频文件到Supabase
+            # 上传预处理后的音频文件到COS
             processed_audio_url = await self._upload_processed_audio(processed_audio_data)
             
             # 调用新的Whisper ASR API（GET请求）
@@ -180,7 +180,7 @@ class RecitationAnalysisService:
     
     async def _upload_processed_audio(self, audio_data: bytes) -> str:
         """
-        上传预处理后的音频文件到Supabase Storage
+        上传预处理后的音频文件到腾讯云COS
         
         Args:
             audio_data: 预处理后的音频数据
@@ -195,28 +195,29 @@ class RecitationAnalysisService:
         temp_file = None
         
         try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+            # 创建临时文件（使用WAV格式，因为预处理后是WAV格式）
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
                 temp_file.write(audio_data)
                 temp_file_path = temp_file.name
             
             # 生成当前月份的文件夹路径
             current_month = datetime.now().strftime("%Y-%m")
-            file_type = f"temp_preprocess_files/{current_month}"
+            storage_path = f"temp_preprocess_files/{current_month}"
             
-            # 上传到Supabase Storage
+            # 上传到腾讯云COS
             from pathlib import Path
-            upload_url = await self.media_service._upload_to_supabase(
+            upload_url = await self.media_service._upload_to_cos(
                 file_path=Path(temp_file_path),
-                file_type=file_type,
-                original_content_type="audio/mpeg"
+                file_type="audio",
+                original_content_type="audio/wav",
+                storage_path=storage_path
             )
             
-            logger.info("预处理音频上传完成")
+            logger.info("预处理音频上传到COS完成")
             return upload_url
             
         except Exception as e:
-            logger.error(f"预处理音频上传失败: {str(e)}", exc_info=True)
+            logger.error(f"预处理音频上传到COS失败: {str(e)}", exc_info=True)
             raise
         finally:
             # 清理临时文件
@@ -680,4 +681,3 @@ class RecitationAnalysisService:
         if self.session:
             await self.session.close()
             self.session = None
-        # 注意：media_service 不需要特别的清理，因为它使用的是同步的supabase客户端 

@@ -11,32 +11,25 @@ from pathlib import Path
 from typing import Tuple, Optional
 import ffmpeg
 import mimetypes
-from supabase import create_client, Client
+from qcloud_cos.cos_exception import CosClientError, CosServiceError
 from fastapi import UploadFile, HTTPException
 
 from app.core.config import settings
 from app.schemas.media import MediaProcessingResult
+from app.utils.cos_client import COSClient
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
-
 
 class MediaProcessingService:
     """媒体文件处理服务"""
     
     def __init__(self):
-        # 检查Supabase配置是否完整
-        if not settings.supabase_url or not settings.supabase_key:
-            raise ValueError("Supabase配置不完整，请检查SUPABASE_URL和SUPABASE_KEY环境变量")
-        
-        self.supabase: Client = create_client(
-            str(settings.supabase_url),  # 类型断言，确保不为None
-            str(settings.supabase_key)   # 类型断言，确保不为None
-        )
+        self.cos_client = COSClient().client
     
     async def process_and_upload_file(self, file: UploadFile) -> MediaProcessingResult:
         """
-        处理并上传文件到Supabase Storage
+        处理并上传文件到腾讯云COS
         
         Args:
             file: 上传的文件
@@ -83,8 +76,8 @@ class MediaProcessingService:
                     detail=f"文件处理失败：文件不存在 - {processed_file_path}"
                 )
             
-            # 上传到Supabase Storage
-            file_url = await self._upload_to_supabase(
+            # 上传到腾讯云COS
+            file_url = await self._upload_to_cos(
                 processed_file_path, file_type, file.content_type
             )
             
@@ -491,17 +484,46 @@ class MediaProcessingService:
             return False
         return False
 
-    async def _upload_to_supabase(
+    async def _upload_to_cos(
         self, 
         file_path: Path, 
         file_type: str,
-        original_content_type: Optional[str] = None
+        original_content_type: Optional[str] = None,
+        bucket: Optional[str] = None,
+        storage_path: Optional[str] = None
     ) -> str:
-        """上传文件到Supabase Storage"""
+        """
+        上传文件到腾讯云COS
+        
+        Args:
+            file_path: 本地文件路径
+            file_type: 文件类型 ('audio' 或 'video')
+            original_content_type: 原始文件的Content-Type
+            bucket: COS存储桶名称，如不指定则使用配置中的默认存储桶
+            storage_path: 存储路径前缀，如不指定则使用 file_type/
+            
+        Returns:
+            str: 文件的公开访问URL
+        """
         try:
-            # 生成文件名
+            # 确定存储桶
+            bucket_name = bucket or settings.cos_bucket
+            if not bucket_name:
+                raise ValueError("未指定COS存储桶名称")
+            
+            # 生成文件名和存储路径
             file_extension = file_path.suffix
-            unique_filename = f"{file_type}/{uuid.uuid4()}{file_extension}"
+            unique_filename = str(uuid.uuid4()) + file_extension
+            
+            # 确定存储路径
+            if storage_path:
+                # 如果指定了存储路径，使用指定的路径
+                if not storage_path.endswith('/'):
+                    storage_path += '/'
+                object_key = storage_path + unique_filename
+            else:
+                # 默认使用文件类型作为路径前缀
+                object_key = f"{file_type}/{unique_filename}"
             
             # 优先使用原始content_type，如果可用且匹配处理后的格式
             if original_content_type and self._is_content_type_compatible(
@@ -512,38 +534,44 @@ class MediaProcessingService:
                 # 根据文件类型和扩展名确定正确的content-type
                 content_type = self._get_content_type(file_extension, file_type)
             
-            # 读取文件内容
-            with open(file_path, 'rb') as f:
-                file_content = f.read()
+            # 检查文件大小以确定上传方式
+            file_size = os.path.getsize(file_path)
+            part_size_bytes = settings.cos_part_size * 1024 * 1024  # MB to bytes
             
-            # 上传到Supabase Storage
-            try:
-                response = self.supabase.storage.from_(
-                    settings.supabase_bucket_name
-                ).upload(unique_filename, file_content, {
-                    'content-type': content_type,
-                    })
-                
-                # 获取公开URL
-                public_url_response = self.supabase.storage.from_(
-                    settings.supabase_bucket_name
-                ).get_public_url(unique_filename)
-
-                # 处理不同类型的返回值
-                if isinstance(public_url_response, dict):
-                    final_url = public_url_response.get('publicURL', public_url_response.get('publicUrl', ''))
-                else:
-                    final_url = str(public_url_response)
-                
-                logger.info("文件上传到Supabase成功")
-                return final_url
-                
-            except Exception as upload_error:
-                logger.error(f"Supabase上传失败: {str(upload_error)}", exc_info=True)
-                raise Exception(f"Upload failed: {str(upload_error)}")
+            logger.info(f"开始上传文件到COS: {object_key}, 大小: {file_size} bytes")
+            
+            # 使用高级上传接口，支持断点续传
+            for retry in range(settings.cos_max_retry):
+                try:
+                    response = self.cos_client.upload_file(
+                        Bucket=bucket_name,
+                        Key=object_key,
+                        LocalFilePath=str(file_path),
+                        PartSize=settings.cos_part_size,
+                        MAXThread=5,
+                        EnableMD5=False,
+                        ContentType=content_type
+                    )
+                    
+                    # 构造文件的公开访问URL
+                    # URL格式：https://{bucket}.cos.{region}.myqcloud.com/{object_key}
+                    public_url = f"https://{bucket_name}.cos.{settings.cos_region}.myqcloud.com/{object_key}"
+                    
+                    logger.info(f"文件上传到COS成功: {public_url}")
+                    return public_url
+                    
+                except (CosClientError, CosServiceError) as upload_error:
+                    logger.error(f"COS上传失败 (尝试 {retry + 1}/{settings.cos_max_retry}): {str(upload_error)}")
+                    if retry == settings.cos_max_retry - 1:  # 最后一次重试
+                        raise Exception(f"Upload failed after {settings.cos_max_retry} retries: {str(upload_error)}")
+                    # 等待一段时间后重试
+                    await asyncio.sleep(2 ** retry)  # 指数退避
+            
+            # 如果所有重试都失败了，抛出异常
+            raise Exception("所有上传重试都失败了")
             
         except Exception as e:
-            logger.error(f"文件上传到Supabase失败: {str(e)}", exc_info=True)
+            logger.error(f"文件上传到COS失败: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"文件上传失败: {str(e)}"

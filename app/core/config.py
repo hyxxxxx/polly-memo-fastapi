@@ -20,10 +20,14 @@ class Settings(BaseSettings):
     api_keys: List[str] = []  # 多个API密钥支持，从环境变量JSON数组读取
     enable_api_key_auth: bool = True  # 是否启用API密钥认证
     
-    # Supabase配置
-    supabase_url: Optional[str] = None
-    supabase_key: Optional[str] = None
-    supabase_bucket_name: str = "polly_memo"
+    # 腾讯云COS配置
+    cos_secret_id: Optional[str] = None  # 腾讯云SecretId
+    cos_secret_key: Optional[str] = None  # 腾讯云SecretKey
+    cos_region: str = "ap-chengdu"  # COS区域，默认上海
+    cos_bucket: Optional[str] = None  # COS存储桶名称，格式：bucket-appid
+    cos_scheme: str = "https"  # 访问协议，默认https
+    cos_part_size: int = 5  # 分块上传大小阈值（MB），小于等于此大小使用简单上传
+    cos_max_retry: int = 3  # 上传失败重试次数
     
     # 文件处理配置
     max_file_size: int = 100 * 1024 * 1024  # 100MB最大上传限制

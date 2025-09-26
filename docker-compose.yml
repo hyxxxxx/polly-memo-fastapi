@@ -1,54 +1,39 @@
+version: '3.8'
+
 services:
-  # 主应用服务
   polly-memo-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: polly-memo-api
-    restart: unless-stopped
+    container_name: polly-memo-fastapi
     ports:
-      - "8000:8000"  # 直接暴露8000端口给宝塔nginx代理
-    environment:
-      # Supabase配置
-      - SUPABASE_URL=${SUPABASE_URL:-https://zodrgxcwimdhuqhdmehg.supabase.co}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - SUPABASE_BUCKET_NAME=${SUPABASE_BUCKET_NAME:-polly_memo}
-      
-      # 文件处理配置
-      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-104857600}  # 100MB
-      - TARGET_FILE_SIZE=${TARGET_FILE_SIZE:-10485760}  # 10MB
-      - TEMP_DIR=${TEMP_DIR:-/tmp/media_processing}
-      
-      # ASR配置 - 使用新的Whisper API
-      # - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}  # 不再需要
-      # - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}    # 不再需要 
-      # - ASR_API_BASE_URL=${ASR_API_BASE_URL:-https://api.cloudflare.com/client/v4/accounts}  # 旧版API
-      - WHISPER_API_URL=${WHISPER_API_URL:-https://whisper-large-v3-turbo.pollylearn.com}
-      - ASR_MODEL=${ASR_MODEL:-whisper-large-v3-turbo}
-      - ASR_DEFAULT_LANGUAGE=${ASR_DEFAULT_LANGUAGE:-en}
-      
-      # GLM-4配置
-      - GLM4_API_KEY=${GLM4_API_KEY}
-      - GLM4_BASE_URL=${GLM4_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
-      - GLM4_MODEL=${GLM4_MODEL:-glm-4-flash}
-      - GLM4_TIMEOUT=${GLM4_TIMEOUT:-60}
-      - GLM4_MAX_TOKENS=${GLM4_MAX_TOKENS:-4096}
+      - "9000:9000"
+    env_file:
+      - .env  # 从根目录的.env文件读取环境变量
     volumes:
-      # 临时文件存储
-      - temp_media:/tmp/media_processing
-    networks:
-      - polly-memo-network
+      # 可选：挂载日志目录
+      - "./logs:/app/logs"
+      # 可选：挂载临时处理目录（用于调试）
+      - "./temp:/tmp/media_processing"
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - polly-memo-network
 
-volumes:
-  # 临时媒体文件存储
-  temp_media:
-    driver: local
+# 可选：如果需要添加其他服务（如数据库、Redis等）
+# services:
+#   redis:
+#     image: redis:7-alpine
+#     container_name: polly-memo-redis
+#     ports:
+#       - "6379:6379"
+#     networks:
+#       - polly-memo-network
 
 networks:
   polly-memo-network:

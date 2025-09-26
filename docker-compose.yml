@@ -10,11 +10,6 @@ services:
       - "9000:9000"
     env_file:
       - .env  # 从根目录的.env文件读取环境变量
-    volumes:
-      # 可选：挂载日志目录
-      - "./logs:/app/logs"
-      # 可选：挂载临时处理目录（用于调试）
-      - "./temp:/tmp/media_processing"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]

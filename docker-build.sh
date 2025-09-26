@@ -29,8 +29,6 @@ case "${1:-build}" in
             --name $CONTAINER_NAME \
             --env-file .env \
             -p $PORT:$PORT \
-            -v "$(pwd)/logs:/app/logs" \
-            -v "$(pwd)/temp:/tmp/media_processing" \
             --restart unless-stopped \
             $IMAGE_NAME
             

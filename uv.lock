@@ -730,6 +730,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-docx" },
     { name = "python-multipart" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -744,6 +745,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.5.0" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-multipart", specifier = ">=0.0.10" },
+    { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 
 [[package]]
